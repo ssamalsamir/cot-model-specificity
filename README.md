@@ -7,9 +7,8 @@ a third model family.
 **Author:** Samir Samal (American High School)
 **Builds on:** [prompting-vs-model-scaling](https://github.com/ssamalsamir/prompting-vs-model-scaling) (v1, two families)
 
-> **Status:** v2 reuses all v1 data (Qwen2.5 and Llama-3) and adds **Gemma-2 (2B, 9B)** as a third
-> family. The Gemma runs and the three-family figures, tables, and manuscript are being finalized;
-> this README and the paper will be updated when the third family's results land.
+> **Status:** Complete. v2 reuses all v1 data (Qwen2.5 and Llama-3) and adds **Gemma-2 (2B, 9B)** as
+> a third family (seed 42, n = 300). See [`paper.pdf`](paper.pdf) for the three-family write-up.
 
 ## Question
 
@@ -30,9 +29,11 @@ intervals, and Holm-adjusted McNemar tests.
 
 ## Findings (v1, two families — v2 tests whether they hold with a third)
 
-- **Primary — chain-of-thought's effect on knowledge is model-specific.** In Qwen2.5, CoT *degrades*
-  MMLU by 6–17 pp (worse with scale); in Llama-3, CoT is neutral-to-helpful. v2 asks whether Gemma-2
-  patterns with Qwen (hurts) or Llama (neutral) — i.e., whether this is a genuine split among families.
+- **Primary — chain-of-thought's effect on knowledge is model-specific, and three families show three
+  distinct patterns.** Qwen2.5: CoT *degrades* MMLU increasingly with scale (−7 to −17 pp). Gemma-2:
+  CoT harms the small model but the harm *fades* with scale (−15 pp at 2B → −1 pp at 9B). Llama-3: CoT
+  is neutral-to-helpful. Not just *whether* CoT hurts knowledge, but *how that changes with scale*, is
+  family-dependent.
 - **Confirming prior work** (Sprague et al., 2024): prompting substitutes for scale on reasoning but
   barely on knowledge — on GSM8K, CoT at a small size beats zero-shot at a much larger size; on MMLU,
   scaling is the only lever.
