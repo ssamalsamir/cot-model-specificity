@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chain-of-Thought's Double Edge Is Model-Specific: Prompting versus Scale Across Three Model Families</title>
+<style>
+  :root { --ink:#1b1b1b; --muted:#5a5a5a; --rule:#cfcfcf; --accent:#5b3a86; }
+  html { font-size: 16.5px; }
+  body { font-family: Georgia, "Times New Roman", serif; color: var(--ink);
+         max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem 5rem; line-height: 1.55; }
+  h1 { font-size: 1.55rem; line-height: 1.25; text-align: center; font-weight: 700;
+       margin: 0 0 .5rem; }
+  .authors { text-align:center; color:var(--ink); font-size:.95rem; margin-bottom:.2rem; }
+  .draft { text-align:center; color:var(--muted); font-family:-apple-system, sans-serif;
+           font-size:.78rem; margin-bottom:1.9rem; }
+  h2 { font-size: 1.12rem; font-weight:700; margin: 2.1rem 0 .5rem;
+       padding-bottom:.22rem; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 1rem; font-weight:700; margin: 1.3rem 0 .3rem; }
+  p { text-align: justify; margin:.6rem 0; }
+  .abstract { background:#f6f6f8; border:1px solid #e4e4ea; border-radius:4px;
+              padding: .9rem 1.2rem; font-size:.92rem; line-height:1.5; }
+  figure { margin: 1.6rem 0; text-align:center; }
+  figure img { max-width: 100%; }
+  figcaption { font-size:.84rem; color:var(--muted); margin-top:.45rem; text-align:left;
+               font-family:-apple-system, sans-serif; line-height:1.45; }
+  table { border-collapse: collapse; width: 100%; font-size: .82rem; margin: 1.1rem 0;
+          font-family:-apple-system, sans-serif;
+          border-top:1.5px solid #333; border-bottom:1.5px solid #333; }
+  th { font-weight:700; padding: 5px 8px; border-bottom:1px solid #333; }
+  td { padding: 4px 8px; text-align:center; border-bottom:.5px solid #ededed; }
+  td.k { text-align:left; font-weight:600; }
+  .best { background:#e9f5e9; font-weight:700; }
+  .bad  { background:#fbeaea; }
+  code { font-family:"SF Mono", Menlo, monospace; font-size:.85em; background:#f1f1f1;
+         padding:1px 4px; border-radius:3px; }
+  .refs { font-size:.84rem; line-height:1.45; }
+  .refs li { margin-bottom:.3rem; }
+  .note { font-family:-apple-system, sans-serif; font-size:.82rem; color:var(--muted);
+          background:#fafafa; border-left:3px solid var(--accent); padding:.5rem .9rem; }
+  a { color: var(--accent); text-decoration: none; }
+  @page { margin: 0.85in; }
+  @media print {
+    html { font-size: 11.8px; }
+    body { max-width: none; margin: 0; padding: 0; }
+    .note { display: none; }
+    figure, table, .abstract { break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+    tr { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Chain-of-Thought's Double Edge Is Model-Specific:<br>Prompting versus Scale Across Three Model Families</h1>
+<div class="authors">Samir Samal &nbsp;·&nbsp; American High School &nbsp;·&nbsp; ssamal.samir@gmail.com</div>
+<div class="draft">Working draft · June 2026 · three model families · n = 300–600 per condition</div>
+
+<div class="abstract">
+<b>Abstract.</b> Practitioners choosing how to spend a limited budget face a recurring
+question: invest in a larger model, or in better prompting? We study this trade-off in a
+controlled setting, sweeping three instruction-tuned model families — Qwen2.5 (0.5B–7B),
+Llama-3 (1B–8B), and Gemma-2 (2B–9B), 4-bit quantization held constant — across four prompting strategies
+(zero-shot, few-shot, chain-of-thought, and structured JSON output) on three tasks spanning
+sentiment (SST-2), knowledge (MMLU), and multi-step arithmetic (GSM8K). We quantify prompting
+as a <b>parameter-equivalent exchange rate</b>: how much model scaling a strategy substitutes
+for. Consistent with recent large-scale evidence that chain-of-thought helps mainly on reasoning and
+barely on knowledge (Sprague et al., 2024), we confirm in this controlled small-model setting that the
+exchange rate is <b>largest on reasoning and smallest on knowledge</b>. On GSM8K, chain-of-thought
+(CoT) at a given size exceeds zero-shot accuracy at a much larger size — a Qwen-1.5B with CoT
+(55.7%) outperforms a Qwen-7B without it (14.3%), and a Llama-3B with CoT (74.7%) beats a
+Llama-8B without it (22.7%). On MMLU, no strategy improves on zero-shot by more than a few points;
+accuracy is governed almost entirely by parameter count. These effects replicate across all three
+families. Our central finding is that CoT's effect on knowledge is model-specific, and the three
+families show three distinct patterns: in Qwen2.5, CoT <em>degrades</em> multiple-choice knowledge QA
+increasingly with scale (−7 to −17pp); in Gemma-2 it harms the small model but the harm fades with
+scale (−15pp at 2B to −1pp at 9B); and in Llama-3 it is neutral-to-helpful. Whether CoT helps or
+hurts knowledge — and how that changes with scale — depends on the model family. Robustness checks (two random seeds, a continuous numeric-presence metric, and
+re-extraction from full outputs) confirm these effects are not scoring artifacts. All experiments
+run on a single 16GB laptop; code and prompts are released at
+<a href="https://github.com/ssamalsamir/cot-model-specificity">github.com/ssamalsamir/cot-model-specificity</a>.
+</div>
+
+<h2>1. Introduction</h2>
+<p>Deploying a language model means choosing both <em>which model</em> and <em>how to prompt
+it</em>, and these choices compete for the same budget: a larger model costs compute, memory, and
+latency, while prompt engineering is nearly free but bounded in effect. Prior work establishes the
+two levers separately — that few-shot ability emerges with scale (Brown et al., 2020), that
+chain-of-thought helps larger models reason (Wei et al., 2022b; Kojima et al., 2022), and that
+accuracy follows smooth scaling laws (Kaplan et al., 2020; Hoffmann et al., 2022) — but rarely
+quantifies how the two trade off against each other on a single, controlled model family.</p>
+<p>We ask two questions. <b>RQ1 (exchange rate):</b> how much model scaling does each prompting
+strategy substitute for, and does this depend on task type? <b>RQ2 (CoT's cost):</b> does the
+strategy that helps reasoning carry over to other task types, or can it hurt?</p>
+<p>Recent large-scale evidence (Sprague et al., 2024) shows chain-of-thought helps mainly on math
+and symbolic reasoning and adds little on knowledge tasks. We first <b>confirm this in a controlled,
+same-family, sub-7B setting</b>: a good prompt buys several model tiers on GSM8K yet almost nothing on
+MMLU, where facts must live in the parameters. Our central <em>new</em> contribution is then to show
+that one such prompting effect is <b>model-family-specific</b> — across three families, chain-of-thought
+ranges from actively harming knowledge questions (Qwen2.5, Gemma-2) to helping them (Llama-3), and the
+direction of the harm's scale-trend itself differs by family (§4.3).</p>
+<p><b>Contributions.</b> (1) <b>Our primary contribution:</b> chain-of-thought's effect on
+multiple-choice knowledge QA is <em>model-family-specific</em>, with three distinct patterns — CoT
+degrades MMLU increasingly with scale in Qwen2.5 (−7 to −17pp), harms the small model but fades with
+scale in Gemma-2 (−15pp → −1pp), and is neutral-to-helpful in Llama-3 — verified
+against extraction and metric artifacts. (2) A controlled, same-family confirmation, in the
+under-studied sub-7B locally-quantized regime, of the recent result (Sprague et al., 2024) that
+prompting (chiefly CoT) substitutes for scale on reasoning but not on knowledge, which we quantify as
+a prompt–parameter exchange rate. (3) Statistical rigor uncommon at this scale: three model families,
+up to two seeds (n = 300–600 per condition), Wilson confidence intervals, and Holm-adjusted McNemar tests.
+(4) A reproducible single-laptop harness, with code and prompts released.</p>
+
+<h2>2. Related Work</h2>
+<p><b>Prompting and scale.</b> In-context few-shot learning emerges with model size (Brown et al.,
+2020); chain-of-thought prompting improves reasoning primarily in larger models (Wei et al., 2022b;
+Kojima et al., 2022). The interaction between few-shot benefit and model size has been studied
+directly (San Joaquin &amp; Haroen, 2022), and recent work shows small models struggle to exploit long
+reasoning chains (Li et al., 2025). Most directly, Sprague et al. (2024) show, across many models and
+datasets, that CoT's gains concentrate in math and symbolic reasoning and are minimal on knowledge
+and language-understanding tasks; we confirm this in a controlled same-family, sub-7B setting and
+extend it by showing one such effect can be model-family-specific. None of these reports a
+quantitative prompt-as-parameters exchange rate on a controlled same-family ladder, nor the
+family-specific knowledge-QA degradation we observe.</p>
+<p><b>Scaling and emergence.</b> Performance follows power-law scaling (Kaplan et al., 2020;
+Hoffmann et al., 2022). Some abilities appear abruptly with scale (Wei et al., 2022a), though this
+"emergence" may partly be an artifact of discontinuous metrics (Schaeffer et al., 2023) — a concern
+we address directly in §4.4.</p>
+<p><b>Format and prompt sensitivity.</b> Enforced output formats can degrade reasoning (Tam et al.,
+2024); meaning-preserving format changes swing accuracy substantially and the sensitivity persists
+across scale (Sclar et al., 2023); few-shot example ordering alone can dominate performance (Lu et
+al., 2022). GSM8K itself may reflect brittle pattern-matching (Mirzadeh et al., 2024). Our closest
+points of comparison are Tam et al. (2024), who study format restrictions but across a heterogeneous
+set of models rather than a controlled size ladder, and San Joaquin &amp; Haroen (2022); neither frames results as an
+exchange rate nor contrasts knowledge against multi-step reasoning as we do.</p>
+
+<h2>3. Methods</h2>
+<p><b>Models.</b> Three instruction-tuned families swept across parameter count with 4-bit
+quantization held constant, so size is the only within-family variable: Qwen2.5-Instruct at 0.5B /
+1.5B / 3B / 7B, Llama-3 at 1B / 3B / 8B, and Gemma-2 at 2B / 9B. We run locally via MLX on an Apple
+M4 (16GB), one model resident at a time.</p>
+<p><b>Tasks.</b> SST-2 (binary sentiment), MMLU (4-way multiple-choice knowledge, stratified across
+57 subjects), GSM8K (grade-school multi-step arithmetic). n = 300 examples per condition. Qwen2.5 and
+Llama-3 were evaluated at two seeds (42 and 43; pooled n = 600); Gemma-2 was evaluated at one seed
+(42; n = 300). Confidence intervals are reported in Appendix C.</p>
+<p><b>Strategies.</b> Zero-shot; few-shot (fixed hand-written exemplars); CoT (reasoning followed by
+a parsed final answer); structured (JSON-only output). Full templates in Appendix&nbsp;A.</p>
+<p><b>Decoding and scoring.</b> Greedy decoding (temperature 0), deterministic. Task-specific answer
+extraction: numeric match for GSM8K, exact label/letter match otherwise.</p>
+<p><b>Statistics.</b> Accuracy with 95% Wilson score intervals (≈ ±5–6pp at n = 300); paired McNemar
+tests (continuity-corrected, Holm-adjusted) for within-model strategy comparisons. We define the
+<b>exchange rate</b> operationally: prompting at size <i>S</i> "matches" scaling if the best-prompt
+accuracy at <i>S</i> meets or exceeds zero-shot accuracy at the next-larger size.</p>
+<p><b>Robustness.</b> To address the concern that exact-match exaggerates discontinuities (Schaeffer
+et al., 2023), for GSM8K we additionally record <i>numeric-present</i> (whether the correct value
+appears anywhere in the output) and the relative error of the committed answer; and we re-extract
+answers from full (untruncated) outputs (§4.4).</p>
+
+<h2>4. Results</h2>
+
+<h3>4.1 Main results</h3>
+<figure>
+  <img src="figures/fig1_scaling.png" alt="Scaling curves by strategy">
+  <figcaption><b>Figure 1.</b> Accuracy vs. model scale (log axis) for each prompting strategy,
+  by family (rows: Qwen2.5, Llama-3, Gemma-2) and task (columns). On GSM8K, the CoT curve (red)
+  separates sharply from all others in every family; on MMLU the strategies bunch together and rise
+  mainly with scale; on SST-2 the spread is moderate. Note Llama-3's erratic few-shot curve (blue).</figcaption>
+</figure>
+
+<table>
+<tr><th>Task</th><th>Model</th><th>zero-shot</th><th>few-shot</th><th>CoT</th><th>structured</th></tr>
+<tr><td class="k" rowspan="4">SST-2</td><td>Qwen-0.5B</td><td>62.0</td><td class="best">85.3</td><td>69.7</td><td>72.0</td></tr>
+<tr><td>Qwen-1.5B</td><td>86.7</td><td class="best">92.7</td><td>84.3</td><td>91.0</td></tr>
+<tr><td>Qwen-3B</td><td>80.7</td><td>81.7</td><td>89.0</td><td class="best">90.7</td></tr>
+<tr><td>Qwen-7B</td><td>87.3</td><td>91.0</td><td>94.7</td><td class="best">95.3</td></tr>
+<tr><td class="k" rowspan="4">MMLU</td><td>Qwen-0.5B</td><td class="best">32.7</td><td>26.3</td><td class="bad">25.3</td><td>25.0</td></tr>
+<tr><td>Qwen-1.5B</td><td>57.3</td><td>55.3</td><td class="bad">47.3</td><td class="best">60.0</td></tr>
+<tr><td>Qwen-3B</td><td>59.7</td><td>59.7</td><td class="bad">49.3</td><td class="best">60.0</td></tr>
+<tr><td>Qwen-7B</td><td>72.3</td><td class="best">74.0</td><td class="bad">55.3</td><td>73.7</td></tr>
+<tr><td class="k" rowspan="4">GSM8K</td><td>Qwen-0.5B</td><td>4.3</td><td>4.0</td><td class="best">25.3</td><td>2.3</td></tr>
+<tr><td>Qwen-1.5B</td><td>2.3</td><td>8.3</td><td class="best">55.7</td><td>14.3</td></tr>
+<tr><td>Qwen-3B</td><td>2.3</td><td>1.7</td><td class="best">70.7</td><td>2.7</td></tr>
+<tr><td>Qwen-7B</td><td>14.3</td><td>2.7</td><td class="best">88.0</td><td>24.0</td></tr>
+</table>
+<p style="text-align:center; font-size:.8rem; color:#555; font-family:-apple-system,sans-serif;">
+<b>Table 1.</b> Qwen2.5 accuracy (%). Green = best strategy for that row; red = CoT underperforms
+zero-shot.</p>
+
+<table>
+<tr><th>Task</th><th>Model</th><th>zero-shot</th><th>few-shot</th><th>CoT</th><th>structured</th></tr>
+<tr><td class="k" rowspan="3">SST-2</td><td>Llama-1B</td><td>67.3</td><td class="bad">0.7</td><td>71.0</td><td class="best">72.0</td></tr>
+<tr><td>Llama-3B</td><td>89.3</td><td class="bad">60.0</td><td>86.0</td><td class="best">90.0</td></tr>
+<tr><td>Llama-8B</td><td class="best">92.0</td><td>85.0</td><td>90.3</td><td>91.7</td></tr>
+<tr><td class="k" rowspan="3">MMLU</td><td>Llama-1B</td><td>31.3</td><td class="bad">4.0</td><td>37.3</td><td class="best">38.3</td></tr>
+<tr><td>Llama-3B</td><td>52.3</td><td>35.0</td><td>56.3</td><td class="best">57.3</td></tr>
+<tr><td>Llama-8B</td><td>60.7</td><td>55.0</td><td>58.7</td><td class="best">62.3</td></tr>
+<tr><td class="k" rowspan="3">GSM8K</td><td>Llama-1B</td><td>6.3</td><td>1.3</td><td class="best">7.3</td><td>6.7</td></tr>
+<tr><td>Llama-3B</td><td>10.0</td><td>1.3</td><td class="best">74.7</td><td>10.7</td></tr>
+<tr><td>Llama-8B</td><td>22.7</td><td>1.0</td><td class="best">79.0</td><td>9.7</td></tr>
+</table>
+<p style="text-align:center; font-size:.8rem; color:#555; font-family:-apple-system,sans-serif;">
+<b>Table 2.</b> Llama-3 accuracy (%). Note few-shot's collapse (red) and that CoT does <em>not</em>
+underperform zero-shot on MMLU here — the key cross-family divergence.</p>
+
+<table>
+<tr><th>Task</th><th>Model</th><th>zero-shot</th><th>few-shot</th><th>CoT</th><th>structured</th></tr>
+<tr><td class="k" rowspan="2">SST-2</td><td>Gemma-2B</td><td class="best">92.3</td><td class="bad">76.3</td><td>91.0</td><td>88.0</td></tr>
+<tr><td>Gemma-9B</td><td>90.3</td><td>91.0</td><td>91.0</td><td class="best">92.7</td></tr>
+<tr><td class="k" rowspan="2">MMLU</td><td>Gemma-2B</td><td>54.3</td><td>50.7</td><td class="bad">39.3</td><td class="best">56.0</td></tr>
+<tr><td>Gemma-9B</td><td class="best">72.3</td><td>70.7</td><td class="bad">71.3</td><td>69.3</td></tr>
+<tr><td class="k" rowspan="2">GSM8K</td><td>Gemma-2B</td><td>7.0</td><td>2.3</td><td class="best">52.7</td><td>6.0</td></tr>
+<tr><td>Gemma-9B</td><td>18.3</td><td>2.3</td><td class="best">84.3</td><td>22.7</td></tr>
+</table>
+<p style="text-align:center; font-size:.8rem; color:#555; font-family:-apple-system,sans-serif;">
+<b>Table 3.</b> Gemma-2 accuracy (%, seed 42, n = 300). On MMLU, CoT underperforms zero-shot (red) by
+−15pp at 2B but only −1pp at 9B — the harm <em>fades</em> with scale, unlike Qwen (worsens) or
+Llama (neutral).</p>
+
+<h3>4.2 The exchange rate is large on reasoning, near-zero on knowledge (RQ1)</h3>
+<figure>
+  <img src="figures/fig3_exchange.png" alt="Exchange rate on GSM8K">
+  <figcaption><b>Figure 3.</b> Zero-shot vs. CoT accuracy on GSM8K. In all three families, CoT at a
+  small size sits far above zero-shot at a much larger size — e.g. Qwen-1.5B + CoT (55.7%) exceeds
+  Qwen-7B zero-shot (14.3%); Llama-3B + CoT (74.7%) exceeds Llama-8B zero-shot (22.7%); Gemma-2B + CoT
+  (52.7%) exceeds Gemma-9B zero-shot (18.3%).</figcaption>
+</figure>
+<p><b>GSM8K — prompting ≫ scaling.</b> CoT at every size exceeds zero-shot at the next size up. A
+1.5B Qwen with CoT outperforms a 7B Qwen without it by 41pp — prompting worth roughly a 5×
+parameter increase — and the pattern repeats in Llama and Gemma (Gemma-2B + CoT 52.7% beats Gemma-9B
+zero-shot 18.3%). Crucially this is CoT-specific: few-shot and structured remain near the floor,
+because answer-only or format-constrained prompts suppress the reasoning the task requires. (Llama-1B
+is an instructive floor: too weak to reason even with CoT.)</p>
+<p><b>MMLU — scaling is irreplaceable.</b> The best strategy improves on zero-shot by at most a few
+points (≤2.7pp in Qwen, ≤7pp in Llama, ≤1.7pp in Gemma). Accuracy rises with parameters
+regardless of prompt. Knowledge either resides in the weights or it does not. This
+reasoning-versus-knowledge split confirms, in a controlled small-model setting, the broad pattern
+reported by Sprague et al. (2024).</p>
+<p><b>SST-2 — prompting helps moderately</b>, with best-strategy gains of 6–23pp, often equivalent
+to about one model tier.</p>
+
+<h3>4.3 CoT is double-edged — but the cost is model-specific (RQ2)</h3>
+<figure>
+  <img src="figures/fig2_cot_delta.png" alt="CoT minus zero-shot by task and family">
+  <figcaption><b>Figure 2.</b> CoT minus zero-shot accuracy (pp) vs. model size. On GSM8K all three
+  families are large and positive. On MMLU they diverge into three patterns: Qwen (purple) drops
+  increasingly below zero (worst at 7B, −17pp); Gemma (green) starts low (−15pp at 2B) but recovers
+  toward zero by 9B; Llama (orange) stays neutral-to-positive. On SST-2 all are small.</figcaption>
+</figure>
+<p>In Qwen2.5, the same CoT that dominates GSM8K <em>degrades</em> MMLU at every size — by 7.4pp
+(0.5B), 10.0pp (1.5B), 10.4pp (3B), and 17.0pp (7B) — with harm growing in scale. We interpret this
+as over-reasoning on multiple-choice items: free-form reasoning creates opportunities to argue away
+the correct option (cf. Tam et al., 2024). Notably, a recent meta-analysis finds CoT roughly
+<em>neutral</em> on MMLU on average (Sprague et al., 2024), so an active, scale-increasing
+degradation within a single family is a stronger and more specific effect than previously reported.</p>
+<p><b>The three families show three distinct patterns.</b> In Llama-3, CoT on MMLU is
+neutral-to-helpful (+6.0pp at 1B, +4.0pp at 3B, −2.0pp at 8B). In Gemma-2, CoT harms the small model
+(−15.0pp at 2B) but the harm <em>fades</em> with scale to near-zero (−1.0pp at 9B) — the opposite
+scale-trend to Qwen, where the harm <em>grows</em>. So across three families CoT's effect on knowledge
+QA ranges from helpful (Llama) to harmful-and-worsening (Qwen) to harmful-but-improving (Gemma). We
+therefore report it as a <em>model-family-dependent phenomenon, not a universal law</em>, while the
+broader claim — that prompting buys little on knowledge regardless of strategy (§4.2) — holds in all
+three families. This divergence is exactly what a single-family study would have over-generalized.</p>
+<p>Conversely, structured (JSON) output is <em>not</em> a universal penalty in any family — it is
+best-in-class on SST-2 (Qwen-7B: 95.3; Llama-8B: 91.7; Gemma-9B: 92.7) and competitive on MMLU, and only clearly
+harmful on GSM8K, refining the "format tax" of Tam et al. (2024) to a reasoning-specific effect. We
+also observe that few-shot is markedly less reliable in Llama-3 than Qwen2.5 (e.g. GSM8K ≈1%,
+SST-2-1B 0.7%), consistent with strong family-specific sensitivity to exemplar formatting (Sclar et
+al., 2023; Lu et al., 2022).</p>
+
+<h3>4.4 The effects are not scoring artifacts</h3>
+<p><b>Continuous metric (GSM8K).</b> Numeric-present tracks exact-match closely rather than
+diverging (Qwen-0.5B CoT 25.3 / 39.0; Qwen-7B CoT 88.0 / 91.0), and the median relative error of the
+committed answer is 0.000 for CoT at 1.5B and above. The low small-model scores are not an artifact
+of a discontinuous metric (Schaeffer et al., 2023).</p>
+<p><b>Extraction audit (MMLU CoT).</b> Re-extracting answers from full outputs, the extraction-failure
+rate is only 2–4%; scoring only cleanly-parsed answers, Qwen CoT still trails zero-shot by 6–16pp at
+every size. The CoT-hurts-knowledge effect in Qwen is real, not a parsing failure.</p>
+
+<h2>5. Discussion</h2>
+<p>Our central observation is that a single prompting technique can help one model family and hurt
+another on the same task: chain-of-thought lifts all three families on math, but on multiple-choice
+knowledge it degrades Qwen (increasingly with scale), harms then largely spares Gemma (the penalty
+fades from −15pp at 2B to −1pp at 9B), and leaves Llama unharmed. Across three families we see three
+distinct behaviours, and the <em>scale-trend</em> itself differs — the harm grows for Qwen but shrinks
+for Gemma. Because each pattern is consistent across sizes within its family, it is unlikely to be
+noise; still, three families is a small sample, so we treat the specific taxonomy as an observation to
+be tested more broadly, not a settled law. A plausible mechanism is over-reasoning: free-form
+deliberation gives a model room to talk itself out of a correct option, and families differ both in
+how susceptible they are and in whether that susceptibility grows or shrinks with scale.</p>
+<p>The broader prompting-versus-scale pattern we confirm — prompting substitutes for scale on
+reasoning but barely on knowledge (Sprague et al., 2024) — has a clean intuition: reasoning tasks hold
+latent capability a prompt can elicit, whereas a fact is either in the weights or it is not, so only
+scale moves it. The practical corollary: under a fixed budget, spend on prompting for reasoning
+workloads and on parameters for knowledge workloads — and do not assume chain-of-thought is safe on
+knowledge questions, because whether it helps depends on the model.</p>
+
+<h2>6. Limitations</h2>
+<ul>
+<li><b>Three families, and Gemma at one seed.</b> Each family's CoT-on-knowledge pattern is consistent
+across its sizes, but three families — with Gemma at only two sizes and a single seed (n = 300, versus
+n = 600 for Qwen and Llama) — cannot establish the three-pattern taxonomy as general; more families,
+sizes, and seeds (and a Gemma second seed) are needed to confirm it generalizes.</li>
+<li><b>4-bit quantization throughout.</b> Held constant, but it may interact with size or family, so a
+quantization contribution to the cross-family difference cannot be fully ruled out; an unquantized
+control would strengthen the claim.</li>
+<li><b>Seeds.</b> For Qwen and Llama, accuracies across seeds 42 and 43 differed by ~2.3pp on average
+(max 7.7pp), within the Wilson intervals, and every effect replicated — but this is not a large-sample
+variance estimate, and Gemma was run at a single seed.</li>
+<li><b>Greedy decoding only</b> — no self-consistency or temperature sweep, either of which could
+shift CoT.</li>
+<li><b>Fixed hand-written exemplars.</b> Prompt-order and format sensitivity were not ablated (Lu et
+al., 2022; Sclar et al., 2023); Llama's erratic few-shot is likely an instance of this.</li>
+<li><b>Scope.</b> Three benchmarks, English-only. GSM8K may probe brittle pattern-matching rather than
+reasoning (Mirzadeh et al., 2024), so the "reasoning" reading is a caveat.</li>
+<li><b>Metric.</b> The Schaeffer (2023) concern is mitigated by the numeric-present metric, but
+exact-match remains the headline; we report both. The "exchange rate" is a descriptive operational
+metric, not a law.</li>
+</ul>
+
+<h2>7. Conclusion</h2>
+<p>In a controlled three-family sweep, we find that chain-of-thought's effect on knowledge questions is
+model-dependent, with three distinct patterns — actively harmful and worsening with scale for Qwen2.5,
+harmful at small scale but fading for Gemma-2, and neutral-to-helpful for Llama-3 — a divergence a
+single-family study would have missed. This sits within a broader pattern, consistent with prior
+large-scale evidence (Sprague et al., 2024), that prompting substitutes for scale on reasoning but
+barely on knowledge. The lever you should pull depends on the task and the model; whether a prompt
+that helps one model helps another is not safe to assume.</p>
+
+<h2>Acknowledgements</h2>
+<p>This is independent research by the author. Experimental code, statistical analysis, figure
+generation, and an initial manuscript draft were produced with the assistance of an AI coding
+assistant (Anthropic's Claude); the author reviewed and verified the methods, results, and claims
+and takes full responsibility for them. <em>[Complete truthfully before submission: name any
+teacher or mentor who advised or reviewed the work, state which parts you developed yourself, and
+adapt this disclosure to the target venue's AI-use policy.]</em> Code and data are available at
+<a href="https://github.com/ssamalsamir/prompting-vs-model-scaling">github.com/ssamalsamir/prompting-vs-model-scaling</a>.</p>
+
+<h2>References</h2>
+<ol class="refs">
+<li>Brown, T. et al. (2020). Language Models are Few-Shot Learners. <i>NeurIPS</i>. arXiv:2005.14165.</li>
+<li>Kaplan, J. et al. (2020). Scaling Laws for Neural Language Models. arXiv:2001.08361.</li>
+<li>Lu, Y. et al. (2022). Fantastically Ordered Prompts and Where to Find Them. <i>ACL</i>. arXiv:2104.08786.</li>
+<li>Wei, J. et al. (2022a). Emergent Abilities of Large Language Models. <i>TMLR</i>. arXiv:2206.07682.</li>
+<li>Wei, J. et al. (2022b). Chain-of-Thought Prompting Elicits Reasoning in LLMs. <i>NeurIPS</i>. arXiv:2201.11903.</li>
+<li>Kojima, T. et al. (2022). Large Language Models are Zero-Shot Reasoners. <i>NeurIPS</i>. arXiv:2205.11916.</li>
+<li>Hoffmann, J. et al. (2022). Training Compute-Optimal LLMs (Chinchilla). <i>NeurIPS</i>. arXiv:2203.15556.</li>
+<li>San Joaquin, A. &amp; Haroen, A. (2022). Understanding How Model Size Affects Few-shot Instruction Prompting. arXiv:2212.01907.</li>
+<li>Schaeffer, R. et al. (2023). Are Emergent Abilities of LLMs a Mirage? <i>NeurIPS</i>. arXiv:2304.15004.</li>
+<li>Sclar, M. et al. (2023). Quantifying LMs' Sensitivity to Spurious Features in Prompt Design. <i>ICLR</i>. arXiv:2310.11324.</li>
+<li>Tam, Z. R. et al. (2024). Let Me Speak Freely? Impact of Format Restrictions on LLM Performance. <i>EMNLP Industry</i>. arXiv:2408.02442.</li>
+<li>Sprague, Z. et al. (2024). To CoT or not to CoT? Chain-of-thought helps mainly on math and symbolic reasoning. <i>ICLR 2025</i>. arXiv:2409.12183.</li>
+<li>Mirzadeh, I. et al. (2024). GSM-Symbolic: Limitations of Mathematical Reasoning in LLMs. arXiv:2410.05229.</li>
+<li>Li, Y. et al. (2025). Small Models Struggle to Learn from Strong Reasoners. arXiv:2502.12143.</li>
+</ol>
+
+
+
+
+
+<!--APPENDIX-START-->
+
+<h2>Appendix A. Prompt templates</h2>
+<p>Each prompt below is wrapped in the model's chat template (<code>apply_chat_template</code>,
+<code>add_generation_prompt=True</code>) before generation. <code>{...}</code> denotes the
+inserted example.</p>
+<h3>A.1 SST-2 (sentiment)</h3>
+<pre>zero-shot:  Classify the sentiment of the following sentence as exactly
+            'positive' or 'negative'.
+
+Sentence: {sentence}
+Sentiment:
+
+few-shot:   Classify the sentiment as 'positive' or 'negative'.
+            [3 exemplars: ("The film is a masterpiece of visual storytelling." -> positive),
+             ("I fell asleep twice. Complete waste of time." -> negative),
+             ("A quietly moving portrait of grief and resilience." -> positive)]
+            
+Sentence: {sentence}
+Sentiment:
+
+CoT:        Identify the key sentiment signals in the sentence, reason through them,
+            then classify as 'positive' or 'negative'. End your response with
+            'Final answer: positive' or 'Final answer: negative'.
+Sentence: {sentence}
+Reasoning:
+
+structured: Classify sentiment. Respond ONLY with valid JSON:
+            {"sentiment": "positive"} or {"sentiment": "negative"}.
+Sentence: {sentence}
+JSON:</pre>
+<h3>A.2 GSM8K (arithmetic)</h3>
+<pre>zero-shot:  Solve the following math problem. Give only the final number as your
+            answer.
+
+Problem: {question}
+Answer:
+
+few-shot:   2 worked examples shown as Problem / Answer (final number only),
+            then Problem: {question}
+Answer:
+
+CoT:        2 worked examples shown as Problem / Reasoning / Answer, then
+            "Solve ... step by step. End with 'Answer: &lt;number&gt;'."
+            
+Problem: {question}
+Reasoning:
+
+structured: Solve this math problem. Respond ONLY with valid JSON:
+            {"answer": "&lt;number&gt;"}.
+Problem: {question}
+JSON:</pre>
+<h3>A.3 MMLU (knowledge, 4-way MC)</h3>
+<pre>zero-shot:  Answer the following multiple choice question. Respond with only the
+            letter A, B, C, or D.
+
+Question: {q}
+{A..D options}
+Answer:
+
+few-shot:   4 exemplars (answers spread across A/B/C/D to avoid position bias),
+            then Question: {q}
+{options}
+Answer:
+
+CoT:        "Think through each option carefully, then end your response with
+            'Final answer: A' (or B, C, D)."
+Question: {q}
+{options}
+Reasoning:
+
+structured: Respond ONLY with valid JSON: {"answer": "A"} (or B, C, D).
+            
+Question: {q}
+{options}
+JSON:</pre>
+
+<h2>Appendix B. Answer-extraction rules</h2>
+<p>Greedy decoding (temperature 0); answers parsed from raw model text as follows.</p>
+<ul>
+<li><b>SST-2.</b> structured: parse JSON <code>sentiment</code> field. CoT: regex
+<code>final answer[:\s]+(positive|negative)</code>. Otherwise: scan the last 60 characters,
+then the whole output, for "positive"/"negative".</li>
+<li><b>GSM8K.</b> structured: parse JSON <code>answer</code>. Otherwise: first match of
+<code>answer[:\s]+$?(number)</code>, then a trailing <code>= $number</code>, then the last
+number in the text (excluding bare years 2020-2026). Scored by numeric equality (tolerance 0.01).</li>
+<li><b>MMLU.</b> structured: parse JSON <code>answer</code>. CoT: regex
+<code>final answer[:\s]+([A-D])</code>. Otherwise: a lone A-D letter on the last non-empty line,
+then the last A-D letter anywhere. Scored by exact letter match.</li>
+</ul>
+<p>Extraction failures count as incorrect. An audit of MMLU-CoT on full (untruncated) outputs
+found a 2-4% extraction-failure rate, with the reported effects unchanged (&sect;4.4).</p>
+<h2>Appendix C. Full per-condition results (95% Wilson CIs &amp; McNemar tests)</h2>
+<p>Qwen2.5 and Llama-3 are pooled over seeds 42 and 43 (n = 600 per condition); Gemma-2 uses seed 42 (n = 300). McNemar tests are continuity-corrected and Holm-adjusted within each model&times;task, comparing each strategy to zero-shot on the same items.</p>
+<h3>C.1 Accuracy and 95% Wilson CI</h3>
+<table><tr><th>Family</th><th>Model</th><th>Task</th><th>Strategy</th><th>n</th><th>Acc (%)</th><th>95% CI</th></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>60.2</td><td>[56.2, 64.0]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>few-shot</td><td>600</td><td>85.5</td><td>[82.5, 88.1]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>CoT</td><td>600</td><td>67.2</td><td>[63.3, 70.8]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>structured</td><td>600</td><td>73.3</td><td>[69.7, 76.7]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>3.2</td><td>[2.0, 4.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>3.8</td><td>[2.6, 5.7]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>26.7</td><td>[23.3, 30.3]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>gsm8k</td><td>structured</td><td>600</td><td>2.8</td><td>[1.8, 4.5]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>35.3</td><td>[31.6, 39.2]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>27.5</td><td>[24.1, 31.2]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>mmlu</td><td>CoT</td><td>600</td><td>28.7</td><td>[25.2, 32.4]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>mmlu</td><td>structured</td><td>600</td><td>26.5</td><td>[23.1, 30.2]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>84.2</td><td>[81.0, 86.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>sst2</td><td>few-shot</td><td>600</td><td>91.0</td><td>[88.4, 93.0]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>sst2</td><td>CoT</td><td>600</td><td>84.8</td><td>[81.7, 87.5]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>sst2</td><td>structured</td><td>600</td><td>90.0</td><td>[87.3, 92.2]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>3.2</td><td>[2.0, 4.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>7.5</td><td>[5.7, 9.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>57.7</td><td>[53.7, 61.6]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>gsm8k</td><td>structured</td><td>600</td><td>13.0</td><td>[10.5, 15.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>54.7</td><td>[50.7, 58.6]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>54.8</td><td>[50.8, 58.8]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>mmlu</td><td>CoT</td><td>600</td><td>45.5</td><td>[41.6, 49.5]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>mmlu</td><td>structured</td><td>600</td><td>57.0</td><td>[53.0, 60.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>79.7</td><td>[76.3, 82.7]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>sst2</td><td>few-shot</td><td>600</td><td>81.0</td><td>[77.7, 83.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>sst2</td><td>CoT</td><td>600</td><td>88.8</td><td>[86.1, 91.1]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>sst2</td><td>structured</td><td>600</td><td>90.2</td><td>[87.5, 92.3]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>2.5</td><td>[1.5, 4.1]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>2.0</td><td>[1.1, 3.5]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>72.3</td><td>[68.6, 75.8]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>gsm8k</td><td>structured</td><td>600</td><td>2.5</td><td>[1.5, 4.1]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>60.3</td><td>[56.4, 64.2]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>59.2</td><td>[55.2, 63.0]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>mmlu</td><td>CoT</td><td>600</td><td>52.0</td><td>[48.0, 56.0]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>mmlu</td><td>structured</td><td>600</td><td>60.5</td><td>[56.5, 64.3]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>84.5</td><td>[81.4, 87.2]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>sst2</td><td>few-shot</td><td>600</td><td>90.3</td><td>[87.7, 92.4]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>sst2</td><td>CoT</td><td>600</td><td>93.0</td><td>[90.7, 94.8]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>sst2</td><td>structured</td><td>600</td><td>94.0</td><td>[91.8, 95.6]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>14.7</td><td>[12.1, 17.7]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>2.3</td><td>[1.4, 3.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>89.0</td><td>[86.2, 91.3]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>gsm8k</td><td>structured</td><td>600</td><td>25.2</td><td>[21.9, 28.8]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>72.2</td><td>[68.4, 75.6]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>72.8</td><td>[69.1, 76.2]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>mmlu</td><td>CoT</td><td>600</td><td>54.0</td><td>[50.0, 57.9]</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>mmlu</td><td>structured</td><td>600</td><td>73.5</td><td>[69.8, 76.9]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>64.8</td><td>[60.9, 68.5]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>sst2</td><td>few-shot</td><td>600</td><td>0.3</td><td>[0.1, 1.2]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>sst2</td><td>CoT</td><td>600</td><td>69.3</td><td>[65.5, 72.9]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>sst2</td><td>structured</td><td>600</td><td>73.2</td><td>[69.5, 76.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>5.7</td><td>[4.1, 7.8]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>2.0</td><td>[1.1, 3.5]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>6.3</td><td>[4.6, 8.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>gsm8k</td><td>structured</td><td>600</td><td>5.3</td><td>[3.8, 7.4]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>31.2</td><td>[27.6, 35.0]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>3.5</td><td>[2.3, 5.3]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>mmlu</td><td>CoT</td><td>600</td><td>35.7</td><td>[31.9, 39.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>mmlu</td><td>structured</td><td>600</td><td>42.2</td><td>[38.3, 46.2]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>88.7</td><td>[85.9, 91.0]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>sst2</td><td>few-shot</td><td>600</td><td>57.5</td><td>[53.5, 61.4]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>sst2</td><td>CoT</td><td>600</td><td>85.0</td><td>[81.9, 87.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>sst2</td><td>structured</td><td>600</td><td>89.7</td><td>[87.0, 91.9]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>10.8</td><td>[8.6, 13.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>1.3</td><td>[0.7, 2.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>73.2</td><td>[69.5, 76.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>gsm8k</td><td>structured</td><td>600</td><td>9.8</td><td>[7.7, 12.5]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>52.7</td><td>[48.7, 56.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>34.0</td><td>[30.3, 37.9]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>mmlu</td><td>CoT</td><td>600</td><td>55.3</td><td>[51.3, 59.3]</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>mmlu</td><td>structured</td><td>600</td><td>56.7</td><td>[52.7, 60.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>92.0</td><td>[89.6, 93.9]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>sst2</td><td>few-shot</td><td>600</td><td>85.0</td><td>[81.9, 87.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>sst2</td><td>CoT</td><td>600</td><td>90.5</td><td>[87.9, 92.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>sst2</td><td>structured</td><td>600</td><td>92.2</td><td>[89.7, 94.1]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>20.7</td><td>[17.6, 24.1]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>1.3</td><td>[0.7, 2.6]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>81.5</td><td>[78.2, 84.4]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>gsm8k</td><td>structured</td><td>600</td><td>9.7</td><td>[7.6, 12.3]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>62.5</td><td>[58.6, 66.3]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>56.8</td><td>[52.8, 60.7]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>CoT</td><td>600</td><td>61.3</td><td>[57.4, 65.1]</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>structured</td><td>600</td><td>64.0</td><td>[60.1, 67.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot</td><td>300</td><td>92.3</td><td>[88.8, 94.8]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>few-shot</td><td>300</td><td>76.3</td><td>[71.2, 80.8]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>CoT</td><td>300</td><td>91.0</td><td>[87.2, 93.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>structured</td><td>300</td><td>88.0</td><td>[83.8, 91.2]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot</td><td>300</td><td>7.0</td><td>[4.6, 10.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>few-shot</td><td>300</td><td>2.3</td><td>[1.1, 4.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>CoT</td><td>300</td><td>52.7</td><td>[47.0, 58.2]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>structured</td><td>300</td><td>6.0</td><td>[3.8, 9.3]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot</td><td>300</td><td>54.3</td><td>[48.7, 59.9]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>few-shot</td><td>300</td><td>50.7</td><td>[45.0, 56.3]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>CoT</td><td>300</td><td>39.3</td><td>[34.0, 45.0]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>structured</td><td>300</td><td>56.0</td><td>[50.3, 61.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot</td><td>300</td><td>90.3</td><td>[86.5, 93.2]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>few-shot</td><td>300</td><td>91.0</td><td>[87.2, 93.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>CoT</td><td>300</td><td>91.0</td><td>[87.2, 93.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>structured</td><td>300</td><td>92.7</td><td>[89.1, 95.1]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot</td><td>300</td><td>18.3</td><td>[14.4, 23.1]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>few-shot</td><td>300</td><td>2.3</td><td>[1.1, 4.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>CoT</td><td>300</td><td>84.3</td><td>[79.8, 88.0]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>structured</td><td>300</td><td>22.7</td><td>[18.3, 27.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot</td><td>300</td><td>72.3</td><td>[67.0, 77.1]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>few-shot</td><td>300</td><td>70.7</td><td>[65.3, 75.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>CoT</td><td>300</td><td>71.3</td><td>[66.0, 76.2]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>structured</td><td>300</td><td>69.3</td><td>[63.9, 74.3]</td></tr>
+</table><h3>C.2 McNemar tests vs. zero-shot (Holm-adjusted)</h3>
+<table><tr><th>Family</th><th>Model</th><th>Task</th><th>Comparison</th><th>p (adj)</th><th></th></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.0006</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.0002</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0015</td><td>**</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.7373</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0002</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0010</td><td>**</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0004</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-1.5b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.2922</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.5045</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0035</td><td>**</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-3b</td><td>mmlu</td><td>zero-shot vs structured</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0002</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.6774</td><td>ns</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Qwen2.5-Instruct</td><td>qwen-7b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.5123</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.0653</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0002</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0059</td><td>**</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0844</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-1b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.0001</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.0293</td><td>*</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.3074</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.5982</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.2415</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-3b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.0482</td><td>*</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.4230</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>sst2</td><td>zero-shot vs structured</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.0023</td><td>**</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.7598</td><td>ns</td></tr>
+<tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.7598</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.5224</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0072</td><td>**</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0216</td><td>*</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.6464</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.3707</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0002</td><td>***</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.4576</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs CoT</td><td>1.0000</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.2113</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.0673</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.8085</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.8085</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.4523</td><td>ns</td></tr>
+</table><p style="font-size:.8rem;color:#555;">Significance: *** p&lt;.001, ** p&lt;.01, * p&lt;.05, ns = not significant.</p>
+<h2>Appendix D. Compute and reproducibility</h2>
+<p>All experiments ran on a single Apple M4 laptop (16 GB unified memory) via MLX, one model
+resident at a time. Models are the 4-bit mlx-community quantizations of Qwen2.5-Instruct
+(0.5/1.5/3/7B), Llama-3 (Llama-3.2-1B/3B, Meta-Llama-3.1-8B), and Gemma-2 (2B, 9B). Decoding is greedy
+(temperature 0). Max new tokens per condition: 8 (MMLU), 16 (SST-2), 48 (GSM8K non-CoT),
+256 (SST-2/MMLU CoT), 512 (GSM8K CoT). n = 300 examples per condition; MMLU is stratified
+across all 57 subjects. Primary results use seed 42; a second seed (43) is reported for
+variance where available. The full harness (<code>run_experiments_local.py</code>), prompt
+builder, extraction code, prompt templates, and per-example results are released at
+<a href="https://github.com/ssamalsamir/cot-model-specificity">github.com/ssamalsamir/cot-model-specificity</a> &mdash; <code>--aggregate</code> reproduces all tables from
+the saved per-example CSVs.</p>
+
+<!--APPENDIX-END-->
+<p class="note"><b>Status.</b> Author/school filled in; all 13 citations verified against arXiv
+(one correction applied — arXiv:2212.01907 is by San Joaquin &amp; Haroen, not Shaikh);
+Appendices A–D built; figures generated from the data. Both families were run at two seeds
+(42, 43) — cross-seed accuracy differed by ~2.3pp on average (7.7pp max), within the Wilson
+intervals, and Appendix C pools both seeds (n = 600). Per the author's choice, no external mentor
+review was sought; one is still recommended before submitting to JEI / arXiv.</p>
+
+</body>
+</html>

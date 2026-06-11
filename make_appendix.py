@@ -34,7 +34,7 @@ def stars(p):
 
 files = {"Qwen2.5-Instruct": ["results/results_seed_42.csv", "results/results_seed_43.csv"],
          "Llama-3": ["results/results_seed_42_llama.csv", "results/results_seed_43_llama.csv"],
-         "Gemma-2": ["results/results_seed_42_gemma.csv", "results/results_seed_43_gemma.csv"]}
+         "Gemma-2": ["results/results_seed_42_gemma.csv"]}
 order = {"Qwen2.5-Instruct": ["qwen-0.5b", "qwen-1.5b", "qwen-3b", "qwen-7b"],
          "Llama-3": ["llama-1b", "llama-3b", "llama-8b"],
          "Gemma-2": ["gemma-2b", "gemma-9b"]}
@@ -132,9 +132,10 @@ found a 2-4% extraction-failure rate, with the reported effects unchanged (&sect
 
 # ── Appendix C: computed tables ──
 C = ['<h2>Appendix C. Full per-condition results (95% Wilson CIs &amp; McNemar tests)</h2>',
-     '<p>All three ladders are pooled over seeds 42 and 43 (n = 600 per condition). McNemar tests are '
-     'continuity-corrected and Holm-adjusted within each model&times;task, comparing each strategy '
-     'to zero-shot on the same items.</p>', '<h3>C.1 Accuracy and 95% Wilson CI</h3>',
+     '<p>Qwen2.5 and Llama-3 are pooled over seeds 42 and 43 (n = 600 per condition); Gemma-2 uses '
+     'seed 42 (n = 300). McNemar tests are continuity-corrected and Holm-adjusted within each '
+     'model&times;task, comparing each strategy to zero-shot on the same items.</p>',
+     '<h3>C.1 Accuracy and 95% Wilson CI</h3>',
      '<table><tr><th>Family</th><th>Model</th><th>Task</th><th>Strategy</th><th>n</th>'
      '<th>Acc (%)</th><th>95% CI</th></tr>']
 for fam, m, t, s, n, acc, lo, hi in ci_rows:
