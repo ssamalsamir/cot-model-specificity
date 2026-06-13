@@ -54,7 +54,7 @@
 
 <h1>Chain-of-Thought's Double Edge Is Model-Specific:<br>Prompting versus Scale Across Three Model Families</h1>
 <div class="authors">Samir Samal &nbsp;·&nbsp; American High School &nbsp;·&nbsp; ssamal.samir@gmail.com</div>
-<div class="draft">Working draft · June 2026 · three model families · n = 300–600 per condition</div>
+<div class="draft">Working draft · June 2026 · three model families · two seeds · n = 600 per condition</div>
 
 <div class="abstract">
 <b>Abstract.</b> Practitioners choosing how to spend a limited budget face a recurring
@@ -75,7 +75,9 @@ families. Our central finding is that CoT's effect on knowledge is model-specifi
 families show three distinct patterns: in Qwen2.5, CoT <em>degrades</em> multiple-choice knowledge QA
 increasingly with scale (−7 to −17pp); in Gemma-2 it harms the small model but the harm fades with
 scale (−15pp at 2B to −1pp at 9B); and in Llama-3 it is neutral-to-helpful. Whether CoT helps or
-hurts knowledge — and how that changes with scale — depends on the model family. Robustness checks (two random seeds, a continuous numeric-presence metric, and
+hurts knowledge — and how that changes with scale — depends on the model family. Each family's pattern
+replicates across two random seeds (n = 600 per condition). Robustness checks (a second seed, a
+continuous numeric-presence metric, and
 re-extraction from full outputs) confirm these effects are not scoring artifacts. All experiments
 run on a single 16GB laptop; code and prompts are released at
 <a href="https://github.com/ssamalsamir/cot-model-specificity">github.com/ssamalsamir/cot-model-specificity</a>.
@@ -107,7 +109,7 @@ against extraction and metric artifacts. (2) A controlled, same-family confirmat
 under-studied sub-7B locally-quantized regime, of the recent result (Sprague et al., 2024) that
 prompting (chiefly CoT) substitutes for scale on reasoning but not on knowledge, which we quantify as
 a prompt–parameter exchange rate. (3) Statistical rigor uncommon at this scale: three model families,
-up to two seeds (n = 300–600 per condition), Wilson confidence intervals, and Holm-adjusted McNemar tests.
+two seeds each (n = 600 per condition), Wilson confidence intervals, and Holm-adjusted McNemar tests.
 (4) A reproducible single-laptop harness, with code and prompts released.</p>
 
 <h2>2. Related Work</h2>
@@ -139,9 +141,9 @@ quantization held constant, so size is the only within-family variable: Qwen2.5-
 1.5B / 3B / 7B, Llama-3 at 1B / 3B / 8B, and Gemma-2 at 2B / 9B. We run locally via MLX on an Apple
 M4 (16GB), one model resident at a time.</p>
 <p><b>Tasks.</b> SST-2 (binary sentiment), MMLU (4-way multiple-choice knowledge, stratified across
-57 subjects), GSM8K (grade-school multi-step arithmetic). n = 300 examples per condition. Qwen2.5 and
-Llama-3 were evaluated at two seeds (42 and 43; pooled n = 600); Gemma-2 was evaluated at one seed
-(42; n = 300). Confidence intervals are reported in Appendix C.</p>
+57 subjects), GSM8K (grade-school multi-step arithmetic). n = 300 examples per condition per seed. All
+three families were evaluated at two seeds (42 and 43; pooled n = 600 per condition). Confidence
+intervals are reported in Appendix C.</p>
 <p><b>Strategies.</b> Zero-shot; few-shot (fixed hand-written exemplars); CoT (reasoning followed by
 a parsed final answer); structured (JSON-only output). Full templates in Appendix&nbsp;A.</p>
 <p><b>Decoding and scoring.</b> Greedy decoding (temperature 0), deterministic. Task-specific answer
@@ -211,7 +213,8 @@ underperform zero-shot on MMLU here — the key cross-family divergence.</p>
 <tr><td>Gemma-9B</td><td>18.3</td><td>2.3</td><td class="best">84.3</td><td>22.7</td></tr>
 </table>
 <p style="text-align:center; font-size:.8rem; color:#555; font-family:-apple-system,sans-serif;">
-<b>Table 3.</b> Gemma-2 accuracy (%, seed 42, n = 300). On MMLU, CoT underperforms zero-shot (red) by
+<b>Table 3.</b> Gemma-2 accuracy (%, seed 42; pooled two-seed CIs in Appendix C). On MMLU, CoT
+underperforms zero-shot (red) by
 −15pp at 2B but only −1pp at 9B — the harm <em>fades</em> with scale, unlike Qwen (worsens) or
 Llama (neutral).</p>
 
@@ -258,7 +261,10 @@ scale-trend to Qwen, where the harm <em>grows</em>. So across three families CoT
 QA ranges from helpful (Llama) to harmful-and-worsening (Qwen) to harmful-but-improving (Gemma). We
 therefore report it as a <em>model-family-dependent phenomenon, not a universal law</em>, while the
 broader claim — that prompting buys little on knowledge regardless of strategy (§4.2) — holds in all
-three families. This divergence is exactly what a single-family study would have over-generalized.</p>
+three families. This divergence is exactly what a single-family study would have over-generalized.
+Gemma's harms-then-fades pattern is stable across seeds: the CoT−zero-shot gap on MMLU is −15.0pp
+(seed 42) and −14.6pp (seed 43) at 2B, narrowing to −1.0pp and −2.0pp at 9B, so the scale-trend is
+not a single-seed accident.</p>
 <p>Conversely, structured (JSON) output is <em>not</em> a universal penalty in any family — it is
 best-in-class on SST-2 (Qwen-7B: 95.3; Llama-8B: 91.7; Gemma-9B: 92.7) and competitive on MMLU, and only clearly
 harmful on GSM8K, refining the "format tax" of Tam et al. (2024) to a reasoning-specific effect. We
@@ -295,16 +301,16 @@ knowledge questions, because whether it helps depends on the model.</p>
 
 <h2>6. Limitations</h2>
 <ul>
-<li><b>Three families, and Gemma at one seed.</b> Each family's CoT-on-knowledge pattern is consistent
-across its sizes, but three families — with Gemma at only two sizes and a single seed (n = 300, versus
-n = 600 for Qwen and Llama) — cannot establish the three-pattern taxonomy as general; more families,
-sizes, and seeds (and a Gemma second seed) are needed to confirm it generalizes.</li>
+<li><b>Three families.</b> Each family's CoT-on-knowledge pattern is consistent across its sizes and
+replicates across two seeds (all families at n = 600), but three families — with Gemma at only two
+sizes — cannot establish the three-pattern taxonomy as general; more families and sizes are needed to
+confirm it generalizes.</li>
 <li><b>4-bit quantization throughout.</b> Held constant, but it may interact with size or family, so a
 quantization contribution to the cross-family difference cannot be fully ruled out; an unquantized
 control would strengthen the claim.</li>
-<li><b>Seeds.</b> For Qwen and Llama, accuracies across seeds 42 and 43 differed by ~2.3pp on average
-(max 7.7pp), within the Wilson intervals, and every effect replicated — but this is not a large-sample
-variance estimate, and Gemma was run at a single seed.</li>
+<li><b>Seeds.</b> Across seeds 42 and 43, per-condition accuracies differed by ~2.2pp on average
+(Qwen 2.4, Llama 2.2, Gemma 2.0; max 7.7pp), within the Wilson intervals, and every effect replicated
+in all three families — but two seeds is still not a large-sample variance estimate.</li>
 <li><b>Greedy decoding only</b> — no self-consistency or temperature sweep, either of which could
 shift CoT.</li>
 <li><b>Fixed hand-written exemplars.</b> Prompt-order and format sensitivity were not ablated (Lu et
@@ -332,7 +338,7 @@ assistant (Anthropic's Claude); the author reviewed and verified the methods, re
 and takes full responsibility for them. <em>[Complete truthfully before submission: name any
 teacher or mentor who advised or reviewed the work, state which parts you developed yourself, and
 adapt this disclosure to the target venue's AI-use policy.]</em> Code and data are available at
-<a href="https://github.com/ssamalsamir/prompting-vs-model-scaling">github.com/ssamalsamir/prompting-vs-model-scaling</a>.</p>
+<a href="https://github.com/ssamalsamir/cot-model-specificity">github.com/ssamalsamir/cot-model-specificity</a>.</p>
 
 <h2>References</h2>
 <ol class="refs">
@@ -351,6 +357,7 @@ adapt this disclosure to the target venue's AI-use policy.]</em> Code and data a
 <li>Mirzadeh, I. et al. (2024). GSM-Symbolic: Limitations of Mathematical Reasoning in LLMs. arXiv:2410.05229.</li>
 <li>Li, Y. et al. (2025). Small Models Struggle to Learn from Strong Reasoners. arXiv:2502.12143.</li>
 </ol>
+
 
 
 
@@ -449,7 +456,7 @@ then the last A-D letter anywhere. Scored by exact letter match.</li>
 <p>Extraction failures count as incorrect. An audit of MMLU-CoT on full (untruncated) outputs
 found a 2-4% extraction-failure rate, with the reported effects unchanged (&sect;4.4).</p>
 <h2>Appendix C. Full per-condition results (95% Wilson CIs &amp; McNemar tests)</h2>
-<p>Qwen2.5 and Llama-3 are pooled over seeds 42 and 43 (n = 600 per condition); Gemma-2 uses seed 42 (n = 300). McNemar tests are continuity-corrected and Holm-adjusted within each model&times;task, comparing each strategy to zero-shot on the same items.</p>
+<p>All three families are pooled over seeds 42 and 43 (n = 600 per condition). McNemar tests are continuity-corrected and Holm-adjusted within each model&times;task, comparing each strategy to zero-shot on the same items.</p>
 <h3>C.1 Accuracy and 95% Wilson CI</h3>
 <table><tr><th>Family</th><th>Model</th><th>Task</th><th>Strategy</th><th>n</th><th>Acc (%)</th><th>95% CI</th></tr>
 <tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>60.2</td><td>[56.2, 64.0]</td></tr>
@@ -536,30 +543,30 @@ found a 2-4% extraction-failure rate, with the reported effects unchanged (&sect
 <tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>56.8</td><td>[52.8, 60.7]</td></tr>
 <tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>CoT</td><td>600</td><td>61.3</td><td>[57.4, 65.1]</td></tr>
 <tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>structured</td><td>600</td><td>64.0</td><td>[60.1, 67.7]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot</td><td>300</td><td>92.3</td><td>[88.8, 94.8]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>few-shot</td><td>300</td><td>76.3</td><td>[71.2, 80.8]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>CoT</td><td>300</td><td>91.0</td><td>[87.2, 93.7]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>structured</td><td>300</td><td>88.0</td><td>[83.8, 91.2]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot</td><td>300</td><td>7.0</td><td>[4.6, 10.5]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>few-shot</td><td>300</td><td>2.3</td><td>[1.1, 4.7]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>CoT</td><td>300</td><td>52.7</td><td>[47.0, 58.2]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>structured</td><td>300</td><td>6.0</td><td>[3.8, 9.3]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot</td><td>300</td><td>54.3</td><td>[48.7, 59.9]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>few-shot</td><td>300</td><td>50.7</td><td>[45.0, 56.3]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>CoT</td><td>300</td><td>39.3</td><td>[34.0, 45.0]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>structured</td><td>300</td><td>56.0</td><td>[50.3, 61.5]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot</td><td>300</td><td>90.3</td><td>[86.5, 93.2]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>few-shot</td><td>300</td><td>91.0</td><td>[87.2, 93.7]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>CoT</td><td>300</td><td>91.0</td><td>[87.2, 93.7]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>structured</td><td>300</td><td>92.7</td><td>[89.1, 95.1]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot</td><td>300</td><td>18.3</td><td>[14.4, 23.1]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>few-shot</td><td>300</td><td>2.3</td><td>[1.1, 4.7]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>CoT</td><td>300</td><td>84.3</td><td>[79.8, 88.0]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>structured</td><td>300</td><td>22.7</td><td>[18.3, 27.7]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot</td><td>300</td><td>72.3</td><td>[67.0, 77.1]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>few-shot</td><td>300</td><td>70.7</td><td>[65.3, 75.5]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>CoT</td><td>300</td><td>71.3</td><td>[66.0, 76.2]</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>structured</td><td>300</td><td>69.3</td><td>[63.9, 74.3]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>90.2</td><td>[87.5, 92.3]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>few-shot</td><td>600</td><td>75.5</td><td>[71.9, 78.8]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>CoT</td><td>600</td><td>89.8</td><td>[87.2, 92.0]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>structured</td><td>600</td><td>86.8</td><td>[83.9, 89.3]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>7.2</td><td>[5.4, 9.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>2.8</td><td>[1.8, 4.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>55.2</td><td>[51.2, 59.1]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>structured</td><td>600</td><td>5.7</td><td>[4.1, 7.8]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>53.3</td><td>[49.3, 57.3]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>51.8</td><td>[47.8, 55.8]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>CoT</td><td>600</td><td>38.5</td><td>[34.7, 42.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>structured</td><td>600</td><td>54.3</td><td>[50.3, 58.3]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot</td><td>600</td><td>89.3</td><td>[86.6, 91.6]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>few-shot</td><td>600</td><td>89.3</td><td>[86.6, 91.6]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>CoT</td><td>600</td><td>90.5</td><td>[87.9, 92.6]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>structured</td><td>600</td><td>92.0</td><td>[89.6, 93.9]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot</td><td>600</td><td>18.2</td><td>[15.3, 21.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>few-shot</td><td>600</td><td>2.3</td><td>[1.4, 3.9]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>CoT</td><td>600</td><td>86.2</td><td>[83.2, 88.7]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>structured</td><td>600</td><td>23.0</td><td>[19.8, 26.5]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot</td><td>600</td><td>71.3</td><td>[67.6, 74.8]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>few-shot</td><td>600</td><td>69.7</td><td>[65.9, 73.2]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>CoT</td><td>600</td><td>69.8</td><td>[66.0, 73.4]</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>structured</td><td>600</td><td>69.8</td><td>[66.0, 73.4]</td></tr>
 </table><h3>C.2 McNemar tests vs. zero-shot (Holm-adjusted)</h3>
 <table><tr><th>Family</th><th>Model</th><th>Task</th><th>Comparison</th><th>p (adj)</th><th></th></tr>
 <tr><td>Qwen2.5-Instruct</td><td>qwen-0.5b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
@@ -626,23 +633,23 @@ found a 2-4% extraction-failure rate, with the reported effects unchanged (&sect
 <tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.7598</td><td>ns</td></tr>
 <tr><td>Llama-3</td><td>llama-8b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.7598</td><td>ns</td></tr>
 <tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.5224</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0072</td><td>**</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0216</td><td>*</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.8852</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0022</td><td>**</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0017</td><td>**</td></tr>
 <tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.6464</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.3707</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0002</td><td>***</td></tr>
-<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.4576</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>1.0000</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs CoT</td><td>1.0000</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.2113</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.1637</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.8520</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
+<tr><td>Gemma-2</td><td>gemma-2b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.8520</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs few-shot</td><td>0.8955</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs CoT</td><td>0.8536</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>sst2</td><td>zero-shot vs structured</td><td>0.0185</td><td>*</td></tr>
 <tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot vs few-shot</td><td>0.0000</td><td>***</td></tr>
 <tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot vs CoT</td><td>0.0000</td><td>***</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.0673</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.8085</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.8085</td><td>ns</td></tr>
-<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.4523</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>gsm8k</td><td>zero-shot vs structured</td><td>0.0030</td><td>**</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs few-shot</td><td>0.5535</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs CoT</td><td>0.6114</td><td>ns</td></tr>
+<tr><td>Gemma-2</td><td>gemma-9b</td><td>mmlu</td><td>zero-shot vs structured</td><td>0.6114</td><td>ns</td></tr>
 </table><p style="font-size:.8rem;color:#555;">Significance: *** p&lt;.001, ** p&lt;.01, * p&lt;.05, ns = not significant.</p>
 <h2>Appendix D. Compute and reproducibility</h2>
 <p>All experiments ran on a single Apple M4 laptop (16 GB unified memory) via MLX, one model
@@ -650,8 +657,8 @@ resident at a time. Models are the 4-bit mlx-community quantizations of Qwen2.5-
 (0.5/1.5/3/7B), Llama-3 (Llama-3.2-1B/3B, Meta-Llama-3.1-8B), and Gemma-2 (2B, 9B). Decoding is greedy
 (temperature 0). Max new tokens per condition: 8 (MMLU), 16 (SST-2), 48 (GSM8K non-CoT),
 256 (SST-2/MMLU CoT), 512 (GSM8K CoT). n = 300 examples per condition; MMLU is stratified
-across all 57 subjects. Primary results use seed 42; a second seed (43) is reported for
-variance where available. The full harness (<code>run_experiments_local.py</code>), prompt
+across all 57 subjects. Headline tables use seed 42; all families were additionally run at a
+second seed (43), pooled in Appendix C. The full harness (<code>run_experiments_local.py</code>), prompt
 builder, extraction code, prompt templates, and per-example results are released at
 <a href="https://github.com/ssamalsamir/cot-model-specificity">github.com/ssamalsamir/cot-model-specificity</a> &mdash; <code>--aggregate</code> reproduces all tables from
 the saved per-example CSVs.</p>

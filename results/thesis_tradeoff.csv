@@ -1,10 +1,10 @@
 family,benchmark,model,zero_shot,best_strategy,best_acc,prompt_uplift_pp,vs_next_size_up
-Gemma-2,gsm8k,gemma-2b,7.0,cot,52.7,45.7,✓ matches/beats gemma-9b zero-shot (18.3)
-Gemma-2,gsm8k,gemma-9b,18.3,cot,84.3,66.0,
-Gemma-2,mmlu,gemma-2b,54.3,structured,56.0,1.7,✗ below gemma-9b zero-shot (72.3)
-Gemma-2,mmlu,gemma-9b,72.3,zero_shot,72.3,0.0,
-Gemma-2,sst2,gemma-2b,92.3,zero_shot,92.3,0.0,✓ matches/beats gemma-9b zero-shot (90.3)
-Gemma-2,sst2,gemma-9b,90.3,structured,92.7,2.4,
+Gemma-2,gsm8k,gemma-2b,7.2,cot,55.2,48.0,✓ matches/beats gemma-9b zero-shot (18.2)
+Gemma-2,gsm8k,gemma-9b,18.2,cot,86.2,68.0,
+Gemma-2,mmlu,gemma-2b,53.3,structured,54.3,1.0,✗ below gemma-9b zero-shot (71.3)
+Gemma-2,mmlu,gemma-9b,71.3,zero_shot,71.3,0.0,
+Gemma-2,sst2,gemma-2b,90.2,zero_shot,90.2,0.0,✓ matches/beats gemma-9b zero-shot (89.3)
+Gemma-2,sst2,gemma-9b,89.3,structured,92.0,2.7,
 Llama-3,gsm8k,llama-1b,5.7,cot,6.3,0.6,✗ below llama-3b zero-shot (10.8)
 Llama-3,gsm8k,llama-3b,10.8,cot,73.2,62.4,✓ matches/beats llama-8b zero-shot (20.7)
 Llama-3,gsm8k,llama-8b,20.7,cot,81.5,60.8,

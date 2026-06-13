@@ -1,14 +1,16 @@
 # Chain-of-Thought's Double Edge Is Model-Specific: Evidence Across Three Model Families
 
 A controlled study of when chain-of-thought (CoT) prompting helps and when it *hurts* — and how
-that depends on the model family. This is **version 2** of an earlier two-family study, extended with
-a third model family.
+that depends on the model family. This is **version 3** of an earlier two-family study, extended with
+a third model family now run at full two-seed parity.
 
 **Author:** Samir Samal (American High School)
 **Builds on:** [prompting-vs-model-scaling](https://github.com/ssamalsamir/prompting-vs-model-scaling) (v1, two families)
 
-> **Status:** Complete. v2 reuses all v1 data (Qwen2.5 and Llama-3) and adds **Gemma-2 (2B, 9B)** as
-> a third family (seed 42, n = 300). See [`paper.pdf`](paper.pdf) for the three-family write-up.
+> **Status:** Complete. v3 reuses all v1 data (Qwen2.5 and Llama-3) and adds **Gemma-2 (2B, 9B)** as
+> a third family at **two seeds (42 and 43), pooled n = 600** — matching the other families. The
+> three-pattern CoT-on-knowledge finding replicates across both seeds. See [`paper.pdf`](paper.pdf)
+> for the three-family write-up.
 
 ## Question
 
@@ -16,8 +18,8 @@ When a single prompting technique (chain-of-thought) helps one model on a task, 
 it helps another? We test this by sweeping multiple instruction-tuned model families across sizes and
 four prompting strategies (zero-shot, few-shot, CoT, structured/JSON) on three task types — SST-2
 (sentiment), MMLU (knowledge), GSM8K (math reasoning) — with 4-bit quantization held constant, run
-locally via MLX. Two seeds (42, 43), n = 300 per condition (pooled n = 600), Wilson confidence
-intervals, and Holm-adjusted McNemar tests.
+locally via MLX. All three families at two seeds (42, 43), n = 300 per condition per seed (pooled
+n = 600), Wilson confidence intervals, and Holm-adjusted McNemar tests.
 
 ## Families
 
@@ -25,13 +27,14 @@ intervals, and Holm-adjusted McNemar tests.
 |---|---|
 | Qwen2.5-Instruct | 0.5B / 1.5B / 3B / 7B |
 | Llama-3 | 1B / 3B / 8B |
-| **Gemma-2 (new in v2)** | **2B / 9B** |
+| **Gemma-2 (added as the third family)** | **2B / 9B** |
 
-## Findings (v1, two families — v2 tests whether they hold with a third)
+## Findings (three families, two seeds each)
 
 - **Primary — chain-of-thought's effect on knowledge is model-specific, and three families show three
   distinct patterns.** Qwen2.5: CoT *degrades* MMLU increasingly with scale (−7 to −17 pp). Gemma-2:
-  CoT harms the small model but the harm *fades* with scale (−15 pp at 2B → −1 pp at 9B). Llama-3: CoT
+  CoT harms the small model but the harm *fades* with scale (−15 pp at 2B → −1 pp at 9B; with n = 600
+  the 2B harm is significant at *p* < 0.001 while the 9B effect is not significant). Llama-3: CoT
   is neutral-to-helpful. Not just *whether* CoT hurts knowledge, but *how that changes with scale*, is
   family-dependent.
 - **Confirming prior work** (Sprague et al., 2024): prompting substitutes for scale on reasoning but
@@ -46,7 +49,7 @@ intervals, and Holm-adjusted McNemar tests.
 run_experiments_local.py   # harness: models (incl. Gemma-2), prompts, extraction, scoring, stats, --aggregate
 make_figures.py            # Figures 1–3 (auto-scales to the number of families)
 make_appendix.py           # Appendix C tables (Wilson CIs + Holm-adjusted McNemar)
-results/                   # per-example CSVs (Qwen + Llama from v1; Gemma added in v2) + aggregates
+results/                   # per-example CSVs (Qwen + Llama from v1; Gemma at seeds 42+43) + aggregates
 figures/                   # generated figures
 ```
 

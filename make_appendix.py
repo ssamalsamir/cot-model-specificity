@@ -34,7 +34,7 @@ def stars(p):
 
 files = {"Qwen2.5-Instruct": ["results/results_seed_42.csv", "results/results_seed_43.csv"],
          "Llama-3": ["results/results_seed_42_llama.csv", "results/results_seed_43_llama.csv"],
-         "Gemma-2": ["results/results_seed_42_gemma.csv"]}
+         "Gemma-2": ["results/results_seed_42_gemma.csv", "results/results_seed_43_gemma.csv"]}
 order = {"Qwen2.5-Instruct": ["qwen-0.5b", "qwen-1.5b", "qwen-3b", "qwen-7b"],
          "Llama-3": ["llama-1b", "llama-3b", "llama-8b"],
          "Gemma-2": ["gemma-2b", "gemma-9b"]}
@@ -132,8 +132,8 @@ found a 2-4% extraction-failure rate, with the reported effects unchanged (&sect
 
 # ── Appendix C: computed tables ──
 C = ['<h2>Appendix C. Full per-condition results (95% Wilson CIs &amp; McNemar tests)</h2>',
-     '<p>Qwen2.5 and Llama-3 are pooled over seeds 42 and 43 (n = 600 per condition); Gemma-2 uses '
-     'seed 42 (n = 300). McNemar tests are continuity-corrected and Holm-adjusted within each '
+     '<p>All three families are pooled over seeds 42 and 43 (n = 600 per condition). McNemar tests '
+     'are continuity-corrected and Holm-adjusted within each '
      'model&times;task, comparing each strategy to zero-shot on the same items.</p>',
      '<h3>C.1 Accuracy and 95% Wilson CI</h3>',
      '<table><tr><th>Family</th><th>Model</th><th>Task</th><th>Strategy</th><th>n</th>'
@@ -159,8 +159,8 @@ resident at a time. Models are the 4-bit mlx-community quantizations of Qwen2.5-
 (0.5/1.5/3/7B), Llama-3 (Llama-3.2-1B/3B, Meta-Llama-3.1-8B), and Gemma-2 (2B, 9B). Decoding is greedy
 (temperature 0). Max new tokens per condition: 8 (MMLU), 16 (SST-2), 48 (GSM8K non-CoT),
 256 (SST-2/MMLU CoT), 512 (GSM8K CoT). n = 300 examples per condition; MMLU is stratified
-across all 57 subjects. Primary results use seed 42; a second seed (43) is reported for
-variance where available. The full harness (<code>run_experiments_local.py</code>), prompt
+across all 57 subjects. Headline tables use seed 42; all families were additionally run at a
+second seed (43), pooled in Appendix C. The full harness (<code>run_experiments_local.py</code>), prompt
 builder, extraction code, prompt templates, and per-example results are released at
 <a href="https://github.com/ssamalsamir/cot-model-specificity">github.com/ssamalsamir/cot-model-specificity</a> &mdash; <code>--aggregate</code> reproduces all tables from
 the saved per-example CSVs.</p>
