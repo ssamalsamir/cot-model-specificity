@@ -82,6 +82,14 @@ MODEL_CONFIGS = {
                   "params_b": 3.0, "family": "Qwen2.5-Instruct"},
     "qwen-7b":   {"hf_name": "mlx-community/Qwen2.5-7B-Instruct-4bit",   "type": "local",
                   "params_b": 7.0, "family": "Qwen2.5-Instruct"},
+    # ── Qwen2.5 full-precision (bf16) control: rules out a quantization artifact.
+    #    7B bf16 (~15GB) does not fit 16GB, so the control covers 0.5/1.5/3B. ──
+    "qwen-0.5b-fp16": {"hf_name": "mlx-community/Qwen2.5-0.5B-Instruct-bf16", "type": "local",
+                  "params_b": 0.5, "family": "Qwen2.5-bf16"},
+    "qwen-1.5b-fp16": {"hf_name": "mlx-community/Qwen2.5-1.5B-Instruct-bf16", "type": "local",
+                  "params_b": 1.5, "family": "Qwen2.5-bf16"},
+    "qwen-3b-fp16":   {"hf_name": "mlx-community/Qwen2.5-3B-Instruct-bf16",   "type": "local",
+                  "params_b": 3.0, "family": "Qwen2.5-bf16"},
     # ── Llama-3 ladder (second family: generality check) ──
     "llama-1b":  {"hf_name": "mlx-community/Llama-3.2-1B-Instruct-4bit",       "type": "local",
                   "params_b": 1.0, "family": "Llama-3"},

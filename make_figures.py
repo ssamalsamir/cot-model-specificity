@@ -6,10 +6,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-OUT = Path("figures")
+HOME = Path.home()
+OUT = HOME / "paper" / "figures"
 OUT.mkdir(parents=True, exist_ok=True)
 
-agg = pd.read_csv(Path("results") / "aggregate_accuracy.csv")
+agg = pd.read_csv(HOME / "results" / "aggregate_accuracy.csv")
 
 families = ["Qwen2.5-Instruct", "Llama-3", "Gemma-2"]
 tasks = ["sst2", "gsm8k", "mmlu"]
@@ -31,7 +32,7 @@ def fmt_log(ax, xs):
 
 
 # ── Figure 1: scaling curves grid (families x tasks) ──
-fig, axes = plt.subplots(len(families), 3, figsize=(13, 3.4 * len(families)))
+fig, axes = plt.subplots(len(families), 3, figsize=(13, 3.5 * len(families)))
 for i, fam in enumerate(families):
     for j, task in enumerate(tasks):
         ax = axes[i][j]
@@ -59,7 +60,7 @@ fig.savefig(OUT / "fig1_scaling.png", dpi=150, bbox_inches="tight")
 plt.close(fig)
 
 # ── Figure 2: CoT − zero-shot delta vs size, per task, both families ──
-fam_color = {"Qwen2.5-Instruct": "#6a3d9a", "Llama-3": "#ff7f00", "Gemma-2": "#1b9e77"}
+fam_color = {"Qwen2.5-Instruct": "#6a3d9a", "Llama-3": "#ff7f00", "Gemma-2": "#2c7fb8"}
 fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
 for j, task in enumerate(tasks):
     ax = axes[j]
@@ -87,7 +88,7 @@ fig.savefig(OUT / "fig2_cot_delta.png", dpi=150, bbox_inches="tight")
 plt.close(fig)
 
 # ── Figure 3: the exchange rate on GSM8K (zero-shot vs CoT scaling) ──
-fig, axes = plt.subplots(1, len(families), figsize=(5.5 * len(families), 4.3), sharey=True)
+fig, axes = plt.subplots(1, len(families), figsize=(5.2 * len(families), 4.3), sharey=True)
 for k, fam in enumerate(families):
     ax = axes[k]
     sub = agg[(agg.family == fam) & (agg.benchmark == "gsm8k")]
